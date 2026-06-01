@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f11;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #f0eee8;
+    --muted: #888;
+    --accent: #c8f566;
+    --accent-dim: rgba(200,245,102,0.12);
+    --red: #ff6b6b;
+    --red-dim: rgba(255,107,107,0.12);
+    --amber: #ffd166;
+    --amber-dim: rgba(255,209,102,0.1);
+    --blue: #74b9ff;
+    --blue-dim: rgba(116,185,255,0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  
+  /* Layout */
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  
+  /* Sidebar */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .logo { padding: 0 20px 24px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .logo-title { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .logo-week { font-size: 11px; color: var(--muted); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .nav-section { padding: 16px 12px 8px; }
+  .nav-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 0 8px; margin-bottom: 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.15s; margin-bottom: 2px; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-balance { margin: auto 0 0; padding: 16px; border-top: 1px solid var(--border); }
+  .balance-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .balance-amount { font-size: 22px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -1px; }
+  .balance-amount.positive { color: var(--accent); }
+  .balance-amount.negative { color: var(--red); }
+  .balance-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  
+  /* Main */
+  .main { padding: 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; }
+  
+  /* Page headers */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; font-family: 'Sora', sans-serif; cursor: pointer; transition: all 0.15s; border: none; }
+  .btn-primary { background: var(--accent); color: #0f0f11; }
+  .btn-primary:hover { background: #d6ff77; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
+  .btn-ghost:hover { background: #2a2a32; }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,107,107,0.2); }
+  .btn-danger:hover { background: rgba(255,107,107,0.2); }
+  .btn-sm { padding: 6px 11px; font-size: 12px; }
+  .btn svg { width: 15px; height: 15px; }
+  
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card-sm { padding: 16px; }
+  
+  /* Summary grid */
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .stat-value { font-size: 24px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -1px; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+  
+  /* Category bars */
+  .categories-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+  .cat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; transition: border-color 0.15s; }
+  .cat-card:hover { border-color: var(--border2); }
+  .cat-card.over { border-color: rgba(255,107,107,0.3); background: linear-gradient(135deg, var(--surface), rgba(255,107,107,0.03)); }
+  .cat-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .cat-name { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cat-amounts { text-align: right; }
+  .cat-spent { font-size: 15px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .cat-budget { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .cat-bar-track { height: 4px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .cat-bar-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
+  .cat-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .cat-badge { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 500; }
+  .cat-badge.over { background: var(--red-dim); color: var(--red); }
+  .cat-badge.warn { background: var(--amber-dim); color: var(--amber); }
+  .cat-badge.ok { background: var(--accent-dim); color: var(--accent); }
+  
+  /* Transactions */
+  .tx-list { display: flex; flex-direction: column; gap: 1px; }
+  .tx-item { display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center; padding: 12px 16px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border); transition: border-color 0.1s; }
+  .tx-item:hover { border-color: var(--border2); }
+  .tx-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .tx-info { min-width: 0; }
+  .tx-desc { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tx-right { text-align: right; }
+  .tx-amount { font-size: 14px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .tx-amount.expense { color: var(--red); }
+  .tx-amount.income { color: var(--accent); }
+  .tx-date { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .tx-delete { opacity: 0; transition: opacity 0.15s; background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; }
+  .tx-item:hover .tx-delete { opacity: 1; }
+  
+  /* Week nav */
+  .week-nav { display: flex; align-items: center; gap: 12px; }
+  .week-nav button { background: var(--surface2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--radius-sm); padding: 6px 12px; cursor: pointer; font-size: 13px; font-family: 'Sora', sans-serif; transition: background 0.15s; }
+  .week-nav button:hover { background: #2a2a32; }
+  .week-label { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; min-width: 140px; text-align: center; }
+  
+  /* Forms */
+  .form-grid { display: grid; gap: 14px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.3px; }
+  .form-group input, .form-group select { width: 100%; background: var(--surface2); border: 1px solid var(--border2); color: var(--text); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; font-family: 'Sora', sans-serif; outline: none; transition: border-color 0.15s; }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+  .form-group select option { background: var(--surface2); }
+  .form-actions { display: flex; gap: 10px; margin-top: 4px; }
+  
+  /* Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-backdrop.hidden { display: none; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 24px; width: 100%; max-width: 440px; }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+  
+  /* Chart container */
+  .chart-wrap { position: relative; height: 220px; }
+  
+  /* Settings */
+  .settings-section { margin-bottom: 32px; }
+  .settings-title { font-size: 14px; font-weight: 500; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .cat-list-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; }
+  .cat-list-item-name { flex: 1; font-size: 13px; }
+  .cat-list-item-budget { font-size: 13px; font-family: 'DM Mono', monospace; color: var(--accent); }
+  
+  /* Empty state */
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
+  .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.3; }
+  
+  /* Pill tabs */
+  .pill-tabs { display: flex; gap: 4px; background: var(--surface2); padding: 4px; border-radius: var(--radius-sm); width: fit-content; margin-bottom: 20px; }
+  .pill-tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; color: var(--muted); border: none; background: none; font-family: 'Sora', sans-serif; }
+  .pill-tab.active { background: var(--surface); color: var(--text); }
+  
+  /* Color swatches */
+  .color-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .color-swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+  .color-swatch.selected { border-color: white; transform: scale(1.15); }
+  
+  /* OneDrive */
+  .onedrive-info { background: var(--blue-dim); border: 1px solid rgba(116,185,255,0.2); border-radius: var(--radius-sm); padding: 14px 16px; font-size: 12px; color: var(--blue); margin-bottom: 16px; line-height: 1.6; }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+  
+  /* Responsive */
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .main { padding: 16px; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+    .categories-grid { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">💰 Budget</div>
+      <div class="logo-week" id="sidebar-week-label">loading…</div>
+    </div>
+    
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" data-page="transactions" onclick="showPage('transactions', this)">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        Transactions
+      </div>
+      <div class="nav-item" data-page="insights" onclick="showPage('insights', this)">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+        Insights
+      </div>
+    </div>
+    
+    <div class="nav-section">
+      <div class="nav-label">Manage</div>
+      <div class="nav-item" data-page="settings" onclick="showPage('settings', this)">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        Categories
+      </div>
+      <div class="nav-item" data-page="sync" onclick="showPage('sync', this)">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        Export / Sync
+      </div>
+    </div>
+    
+    <div class="nav-balance">
+      <div class="balance-label">This week balance</div>
+      <div class="balance-amount" id="sidebar-balance">$0</div>
+      <div class="balance-sub" id="sidebar-balance-sub">income - expenses</div>
+    </div>
+  </aside>
+  
+  <!-- Main content -->
+  <main class="main">
+    
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-sub" id="dash-week-label">This week</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <div class="week-nav">
+            <button onclick="changeWeek(-1)">← prev</button>
+            <span class="week-label" id="week-display">loading…</span>
+            <button onclick="changeWeek(1)">next →</button>
+          </div>
+          <button class="btn btn-primary" onclick="openAddTx()">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add
+          </button>
+        </div>
+      </div>
+      
+      <div class="summary-grid">
+        <div class="stat-card">
+          <div class="stat-label">Income</div>
+          <div class="stat-value accent" id="stat-income">$0</div>
+          <div class="stat-sub">this week</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Expenses</div>
+          <div class="stat-value red" id="stat-expenses">$0</div>
+          <div class="stat-sub">this week</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Budget Used</div>
+          <div class="stat-value amber" id="stat-budget-pct">0%</div>
+          <div class="stat-sub" id="stat-budget-sub">of weekly budget</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Remaining</div>
+          <div class="stat-value" id="stat-remaining">$0</div>
+          <div class="stat-sub">budget left</div>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;">
+        <div class="card">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;">Weekly spending</div>
+          <div class="chart-wrap">
+            <canvas id="weeklyChart" role="img" aria-label="Weekly spending by category bar chart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;">Budget vs spent</div>
+          <div class="chart-wrap">
+            <canvas id="budgetChart" role="img" aria-label="Budget vs spent by category"></canvas>
+          </div>
+        </div>
+      </div>
+      
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;">Categories</div>
+      <div class="categories-grid" id="categories-grid"></div>
+    </div>
+    
+    <!-- TRANSACTIONS -->
+    <div class="page" id="page-transactions">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Transactions</div>
+          <div class="page-sub">All entries for the selected week</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="week-nav">
+            <button onclick="changeWeek(-1)">← prev</button>
+            <span class="week-label" id="tx-week-display">loading…</span>
+            <button onclick="changeWeek(1)">next →</button>
+          </div>
+          <button class="btn btn-primary" onclick="openAddTx()">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add
+          </button>
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:10px;margin-bottom:16px;">
+        <div class="pill-tabs" id="tx-filter-tabs">
+          <button class="pill-tab active" onclick="setTxFilter('all', this)">All</button>
+          <button class="pill-tab" onclick="setTxFilter('income', this)">Income</button>
+          <button class="pill-tab" onclick="setTxFilter('expense', this)">Expenses</button>
+        </div>
+      </div>
+      
+      <div class="tx-list" id="tx-list"></div>
+    </div>
+    
+    <!-- INSIGHTS -->
+    <div class="page" id="page-insights">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Insights</div>
+          <div class="page-sub">Trends across recent weeks</div>
+        </div>
+      </div>
+      <div style="display:grid;gap:16px;">
+        <div class="card">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;">8-week spending trend</div>
+          <div class="chart-wrap" style="height:200px;">
+            <canvas id="trendChart" role="img" aria-label="8-week spending trend line chart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:0.8px;">Category breakdown (8 weeks)</div>
+          <div class="chart-wrap" style="height:180px;">
+            <canvas id="pieChart" role="img" aria-label="Category breakdown donut chart"></canvas>
+          </div>
+        </div>
+        <div class="card" id="insights-cats"></div>
+      </div>
+    </div>
+    
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Categories</div>
+          <div class="page-sub">Manage your budget categories</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddCat()">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New category
+        </button>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-title">Your categories</div>
+        <div id="settings-cat-list"></div>
+      </div>
+      
+      <div class="settings-section">
+        <div class="settings-title">Income categories</div>
+        <div id="settings-income-cat-list"></div>
+      </div>
+    </div>
+    
+    <!-- SYNC -->
+    <div class="page" id="page-sync">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Export &amp; Sync</div>
+          <div class="page-sub">Export to Excel or sync with OneDrive</div>
+        </div>
+      </div>
+      
+      <div style="display:grid;gap:16px;max-width:600px;">
+        <div class="card">
+          <div style="font-size:14px;font-weight:500;margin-bottom:6px;">Export to Excel (.xlsx)</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Downloads all transactions and budget categories. Upload the file to OneDrive to keep a backup.</div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-ghost" onclick="exportXLSX()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .xlsx
+            </button>
+            <button class="btn btn-ghost" onclick="importXLSX()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import .xlsx
+            </button>
+            <input type="file" id="xlsx-input" accept=".xlsx" style="display:none" onchange="handleXLSXImport(event)">
+          </div>
+        </div>
+        
+        <div class="card">
+          <div style="font-size:14px;font-weight:500;margin-bottom:6px;">OneDrive Auto-Sync</div>
+          <div class="onedrive-info">
+            Auto-sync writes directly to a file in your OneDrive on every save. It requires a one-time Azure App registration (free). Follow the setup guide below.
+          </div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Setup</div>
+          <ol style="font-size:12px;color:var(--muted);padding-left:18px;line-height:2.2;">
+            <li>Go to <a href="https://portal.azure.com" style="color:var(--blue);">portal.azure.com</a> → App registrations → New registration</li>
+            <li>Name it "Budget Tracker", select "Personal Microsoft accounts only"</li>
+            <li>Under Redirect URIs add: <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;">https://YOUR-GITHUB-PAGES-URL</code></li>
+            <li>Copy the <strong>Application (client) ID</strong></li>
+            <li>Under API permissions add: <code style="background:var(--surface2);padding:1px 6px;border-radius:4px;">Files.ReadWrite</code> (delegated)</li>
+            <li>Paste your Client ID below and click Connect</li>
+          </ol>
+          <div style="display:flex;gap:10px;margin-top:16px;align-items:flex-end;">
+            <div class="form-group" style="flex:1;">
+              <label>Azure Client ID</label>
+              <input type="text" id="od-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;">
+            </div>
+            <button class="btn btn-ghost" onclick="oneDriveConnect()">Connect OneDrive</button>
+          </div>
+          <div id="od-status" style="font-size:12px;color:var(--muted);margin-top:10px;"></div>
+          <div id="od-actions" style="display:none;gap:10px;margin-top:12px;flex-direction:column;">
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-ghost btn-sm" onclick="oneDrivePush()">↑ Push to OneDrive</button>
+              <button class="btn btn-ghost btn-sm" onclick="oneDrivePull()">↓ Pull from OneDrive</button>
+              <button class="btn btn-danger btn-sm" onclick="oneDriveDisconnect()">Disconnect</button>
+            </div>
+            <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="od-auto" onchange="toggleAutoSync(this.checked)" style="width:auto;">
+              Auto-push on every save
+            </label>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div style="font-size:14px;font-weight:500;margin-bottom:6px;">Data management</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">All data is stored locally in your browser's localStorage. Nobody else can access it.</div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-ghost" onclick="exportJSON()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Backup JSON
+            </button>
+            <button class="btn btn-ghost" onclick="importJSON()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Restore JSON
+            </button>
+            <input type="file" id="json-input" accept=".json" style="display:none" onchange="handleJSONImport(event)">
+            <button class="btn btn-danger" onclick="clearAllData()">Clear all data</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </main>
+</div>
+
+<!-- Add Transaction Modal -->
+<div class="modal-backdrop hidden" id="tx-modal">
+  <div class="modal">
+    <div class="modal-title" id="tx-modal-title">Add transaction</div>
+    <div class="pill-tabs" style="margin-bottom:18px;" id="tx-type-tabs">
+      <button class="pill-tab active" onclick="setTxType('expense', this)">Expense</button>
+      <button class="pill-tab" onclick="setTxType('income', this)">Income</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="tx-desc" placeholder="e.g. Coffee at Toast">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Amount ($)</label>
+          <input type="number" id="tx-amount" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="tx-date">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="tx-category"></select>
+      </div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" id="tx-note" placeholder="Any extra details">
+      </div>
+    </div>
+    <div class="form-actions" style="margin-top:18px;">
+      <button class="btn btn-primary" onclick="saveTx()" id="tx-save-btn">Save</button>
+      <button class="btn btn-ghost" onclick="closeTxModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal-backdrop hidden" id="cat-modal">
+  <div class="modal">
+    <div class="modal-title" id="cat-modal-title">New category</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="cat-name" placeholder="e.g. Groceries">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Weekly budget ($)</label>
+          <input type="number" id="cat-budget" placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+          <label>Emoji icon</label>
+          <input type="text" id="cat-emoji" placeholder="🛒" maxlength="2">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <div class="color-grid" id="cat-color-grid"></div>
+        <input type="hidden" id="cat-color" value="#c8f566">
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="cat-type">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions" style="margin-top:18px;">
+      <button class="btn btn-primary" onclick="saveCat()">Save</button>
+      <button class="btn btn-ghost" onclick="closeCatModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteCat()" id="cat-delete-btn" style="display:none;margin-left:auto;">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────────
+const PALETTE = ['#c8f566','#ff6b6b','#74b9ff','#ffd166','#a29bfe','#55efc4','#fd79a8','#fdcb6e','#00cec9','#e17055'];
+const DEFAULT_CATS = [
+  {id:'food',name:'Food & Dining',budget:150,emoji:'🍜',color:'#ffd166',type:'expense'},
+  {id:'transport',name:'Transport',budget:60,emoji:'🚌',color:'#74b9ff',type:'expense'},
+  {id:'groceries',name:'Groceries',budget:100,emoji:'🛒',color:'#55efc4',type:'expense'},
+  {id:'shopping',name:'Shopping',budget:80,emoji:'🛍️',color:'#fd79a8',type:'expense'},
+  {id:'entertainment',name:'Entertainment',budget:50,emoji:'🎮',color:'#a29bfe',type:'expense'},
+  {id:'health',name:'Health',budget:40,emoji:'💊',color:'#00cec9',type:'expense'},
+  {id:'utilities',name:'Utilities',budget:70,emoji:'💡',color:'#fdcb6e',type:'expense'},
+  {id:'salary',name:'Salary',budget:0,emoji:'💼',color:'#c8f566',type:'income'},
+  {id:'freelance',name:'Freelance',budget:0,emoji:'💻',color:'#c8f566',type:'income'},
+];
+
+let state = {
+  transactions: [],
+  categories: [],
+  currentWeekOffset: 0,
+  txFilter: 'all',
+  currentTxType: 'expense',
+  editingTxId: null,
+  editingCatId: null,
+  odConnected: false,
+  odToken: null,
+  odFileId: null,
+  odAutoSync: false,
+};
+
+function load() {
+  const saved = localStorage.getItem('budget_v2');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    state.transactions = parsed.transactions || [];
+    state.categories = parsed.categories || DEFAULT_CATS;
+    state.odConnected = parsed.odConnected || false;
+    state.odToken = parsed.odToken || null;
+    state.odFileId = parsed.odFileId || null;
+    state.odAutoSync = parsed.odAutoSync || false;
+  } else {
+    state.categories = DEFAULT_CATS;
+  }
+}
+
+function save() {
+  localStorage.setItem('budget_v2', JSON.stringify({
+    transactions: state.transactions,
+    categories: state.categories,
+    odConnected: state.odConnected,
+    odToken: state.odToken,
+    odFileId: state.odFileId,
+    odAutoSync: state.odAutoSync,
+  }));
+  if (state.odAutoSync && state.odConnected) oneDrivePush(true);
+}
+
+// ─── WEEK UTILS ──────────────────────────────────────────────────────────────
+function getWeekRange(offset = 0) {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23,59,59,999);
+  return {start: monday, end: sunday};
+}
+
+function fmtDate(d) {
+  return d.toLocaleDateString('en-SG', {day:'numeric', month:'short'});
+}
+
+function weekLabel(offset = 0) {
+  const {start, end} = getWeekRange(offset);
+  if (offset === 0) return `This week · ${fmtDate(start)} – ${fmtDate(end)}`;
+  if (offset === -1) return `Last week · ${fmtDate(start)} – ${fmtDate(end)}`;
+  return `${fmtDate(start)} – ${fmtDate(end)}`;
+}
+
+function txInWeek(tx, offset) {
+  const {start, end} = getWeekRange(offset);
+  const d = new Date(tx.date);
+  return d >= start && d <= end;
+}
+
+function fmtMoney(n) {
+  return '$' + Math.abs(n).toLocaleString('en-SG', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0,10);
+}
+
+// ─── NAV ──────────────────────────────────────────────────────────────────────
+function showPage(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  if (el) el.classList.add('active');
+  renderAll();
+}
+
+function changeWeek(dir) {
+  state.currentWeekOffset += dir;
+  renderAll();
+}
+
+// ─── RENDER ALL ───────────────────────────────────────────────────────────────
+let weeklyChartInst, budgetChartInst, trendChartInst, pieChartInst;
+
+function renderAll() {
+  const offset = state.currentWeekOffset;
+  const label = weekLabel(offset);
+  document.getElementById('week-display').textContent = label.split('·')[1]?.trim() || label;
+  document.getElementById('tx-week-display').textContent = label.split('·')[1]?.trim() || label;
+  document.getElementById('dash-week-label').textContent = label;
+  document.getElementById('sidebar-week-label').textContent = label;
+
+  const txs = state.transactions.filter(t => txInWeek(t, offset));
+  const expCats = state.categories.filter(c => c.type === 'expense');
+  const income = txs.filter(t => t.type === 'income').reduce((s,t) => s + t.amount, 0);
+  const expenses = txs.filter(t => t.type === 'expense').reduce((s,t) => s + t.amount, 0);
+  const totalBudget = expCats.reduce((s,c) => s + c.budget, 0);
+  const remaining = totalBudget - expenses;
+  const pct = totalBudget > 0 ? Math.round(expenses / totalBudget * 100) : 0;
+  const balance = income - expenses;
+
+  document.getElementById('stat-income').textContent = fmtMoney(income);
+  document.getElementById('stat-expenses').textContent = fmtMoney(expenses);
+  document.getElementById('stat-budget-pct').textContent = pct + '%';
+  document.getElementById('stat-budget-sub').textContent = `of ${fmtMoney(totalBudget)} budget`;
+  document.getElementById('stat-remaining').textContent = fmtMoney(remaining);
+  document.getElementById('stat-remaining').style.color = remaining >= 0 ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('sidebar-balance').textContent = (balance >= 0 ? '+' : '-') + fmtMoney(balance);
+  document.getElementById('sidebar-balance').className = 'balance-amount ' + (balance >= 0 ? 'positive' : 'negative');
+  document.getElementById('sidebar-balance-sub').textContent = fmtMoney(income) + ' in · ' + fmtMoney(expenses) + ' out';
+
+  renderCategoryCards(txs, expCats);
+  renderTxList(txs);
+  renderCharts(txs, expCats);
+  renderInsights();
+  renderSettings();
+
+  if (state.odConnected) {
+    document.getElementById('od-status').textContent = '✓ Connected to OneDrive';
+    document.getElementById('od-status').style.color = 'var(--accent)';
+    document.getElementById('od-actions').style.display = 'flex';
+    document.getElementById('od-auto').checked = state.odAutoSync;
+  }
+  const savedId = localStorage.getItem('od_client_id');
+  if (savedId) document.getElementById('od-client-id').value = savedId;
+}
+
+function renderCategoryCards(txs, cats) {
+  const grid = document.getElementById('categories-grid');
+  if (!cats.length) { grid.innerHTML = '<div class="empty"><div class="empty-icon">📂</div>No expense categories yet</div>'; return; }
+  grid.innerHTML = cats.map(cat => {
+    const spent = txs.filter(t => t.type === 'expense' && t.category === cat.id).reduce((s,t) => s + t.amount, 0);
+    const pct = cat.budget > 0 ? Math.min(spent / cat.budget * 100, 100) : 0;
+    const over = cat.budget > 0 && spent > cat.budget;
+    const warn = cat.budget > 0 && spent / cat.budget >= 0.8 && !over;
+    const badge = over ? '<span class="cat-badge over">Over budget</span>' : warn ? '<span class="cat-badge warn">80%+</span>' : '<span class="cat-badge ok">On track</span>';
+    const barColor = over ? 'var(--red)' : warn ? 'var(--amber)' : cat.color;
+    const remaining = cat.budget - spent;
+    return `<div class="cat-card ${over ? 'over' : ''}" onclick="showPage('transactions', document.querySelector('[data-page=transactions]'))">
+      <div class="cat-header">
+        <div class="cat-name"><span style="font-size:18px;">${cat.emoji}</span> ${cat.name}</div>
+        <div class="cat-amounts">
+          <div class="cat-spent" style="color:${over ? 'var(--red)' : 'var(--text)'}">${fmtMoney(spent)}</div>
+          <div class="cat-budget">/ ${fmtMoney(cat.budget)}</div>
+        </div>
+      </div>
+      <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+      <div class="cat-footer">
+        <span>${Math.round(pct)}% used</span>
+        ${badge}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTxList(txs) {
+  const list = document.getElementById('tx-list');
+  let filtered = txs;
+  if (state.txFilter === 'income') filtered = txs.filter(t => t.type === 'income');
+  if (state.txFilter === 'expense') filtered = txs.filter(t => t.type === 'expense');
+  filtered = [...filtered].sort((a,b) => new Date(b.date) - new Date(a.date));
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>No transactions this week</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(tx => {
+    const cat = state.categories.find(c => c.id === tx.category);
+    const dateStr = new Date(tx.date).toLocaleDateString('en-SG', {weekday:'short', day:'numeric', month:'short'});
+    return `<div class="tx-item">
+      <div class="tx-icon" style="background:${cat ? cat.color + '22' : '#ffffff11'}">${cat ? cat.emoji : '💰'}</div>
+      <div class="tx-info">
+        <div class="tx-desc">${tx.desc}</div>
+        <div class="tx-meta">${cat ? cat.name : 'Uncategorized'}${tx.note ? ' · ' + tx.note : ''}</div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount ${tx.type}">${tx.type === 'expense' ? '-' : '+'}${fmtMoney(tx.amount)}</div>
+        <div class="tx-date">${dateStr}</div>
+      </div>
+      <button class="tx-delete" onclick="deleteTx('${tx.id}')" title="Delete">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function renderCharts(txs, cats) {
+  const ctxW = document.getElementById('weeklyChart').getContext('2d');
+  const ctxB = document.getElementById('budgetChart').getContext('2d');
+  const labels = cats.map(c => c.emoji + ' ' + c.name.split(' ')[0]);
+  const spent = cats.map(cat => txs.filter(t => t.type==='expense' && t.category===cat.id).reduce((s,t) => s+t.amount, 0));
+  const budgets = cats.map(c => c.budget);
+  const barColors = cats.map((c, i) => {
+    const s = spent[i], b = c.budget;
+    return b > 0 && s > b ? '#ff6b6b' : b > 0 && s/b >= 0.8 ? '#ffd166' : c.color;
+  });
+
+  if (weeklyChartInst) weeklyChartInst.destroy();
+  weeklyChartInst = new Chart(ctxW, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Spent', data: spent, backgroundColor: barColors, borderRadius: 6, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#888', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 10 }, callback: v => '$'+v }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+  });
+
+  if (budgetChartInst) budgetChartInst.destroy();
+  budgetChartInst = new Chart(ctxB, {
+    type: 'bar',
+    data: { labels,
+      datasets: [
+        { label: 'Budget', data: budgets, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 6 },
+        { label: 'Spent', data: spent, backgroundColor: barColors, borderRadius: 6 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#888', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 10 }, callback: v => '$'+v }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+  });
+}
+
+function renderInsights() {
+  const weeks = Array.from({length:8}, (_,i) => i - 7);
+  const weekData = weeks.map(offset => {
+    const txs = state.transactions.filter(t => txInWeek(t, offset));
+    return txs.filter(t => t.type === 'expense').reduce((s,t) => s + t.amount, 0);
+  });
+  const weekLabels = weeks.map(offset => {
+    const {start} = getWeekRange(offset);
+    return fmtDate(start);
+  });
+
+  const ctxT = document.getElementById('trendChart').getContext('2d');
+  const ctxP = document.getElementById('pieChart').getContext('2d');
+  if (trendChartInst) trendChartInst.destroy();
+  trendChartInst = new Chart(ctxT, {
+    type: 'line',
+    data: { labels: weekLabels, datasets: [{ label: 'Expenses', data: weekData, borderColor: '#c8f566', backgroundColor: 'rgba(200,245,102,0.08)', fill: true, tension: 0.35, pointBackgroundColor: '#c8f566', pointRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#888', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#888', font: { size: 10 }, callback: v => '$'+v }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+  });
+
+  const allTxs = state.transactions.filter(t => { const o = -7; return txInWeek(t, o) || weeks.some(w => txInWeek(t, w)); });
+  const expCats = state.categories.filter(c => c.type === 'expense');
+  const catTotals = expCats.map(cat => ({ cat, total: state.transactions.filter(t => t.type==='expense' && t.category===cat.id && weeks.some(w => txInWeek(t, w))).reduce((s,t) => s+t.amount, 0) })).filter(x => x.total > 0);
+
+  if (pieChartInst) pieChartInst.destroy();
+  if (catTotals.length) {
+    pieChartInst = new Chart(ctxP, {
+      type: 'doughnut',
+      data: { labels: catTotals.map(x => x.cat.emoji + ' ' + x.cat.name), datasets: [{ data: catTotals.map(x => x.total), backgroundColor: catTotals.map(x => x.cat.color), borderWidth: 0, hoverOffset: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { color: '#888', font: { size: 11 }, padding: 12, boxWidth: 10 } } } }
+    });
+  }
+
+  const insDiv = document.getElementById('insights-cats');
+  const totalBudget = expCats.reduce((s,c) => s + c.budget * 8, 0);
+  const totalSpent = catTotals.reduce((s,x) => s + x.total, 0);
+  insDiv.innerHTML = `<div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px;">8-week summary</div>` + catTotals.sort((a,b) => b.total - a.total).map(x => {
+    const pct = Math.round(x.total / totalSpent * 100) || 0;
+    return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      <span style="font-size:18px;width:24px;text-align:center;">${x.cat.emoji}</span>
+      <div style="flex:1;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+          <span>${x.cat.name}</span>
+          <span style="font-family:'DM Mono',monospace;color:${x.cat.color}">${fmtMoney(x.total)}</span>
+        </div>
+        <div style="height:3px;background:var(--surface2);border-radius:99px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${x.cat.color};border-radius:99px;"></div>
+        </div>
+      </div>
+      <span style="font-size:11px;color:var(--muted);width:28px;text-align:right;">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+function renderSettings() {
+  const expCats = state.categories.filter(c => c.type === 'expense');
+  const incCats = state.categories.filter(c => c.type === 'income');
+  const renderList = (cats, containerId) => {
+    const el = document.getElementById(containerId);
+    el.innerHTML = cats.length ? cats.map(cat => `
+      <div class="cat-list-item">
+        <span style="font-size:20px;">${cat.emoji}</span>
+        <div class="cat-list-item-name">${cat.name}</div>
+        ${cat.type === 'expense' ? `<div class="cat-list-item-budget">${fmtMoney(cat.budget)}/wk</div>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openEditCat('${cat.id}')">Edit</button>
+      </div>`) .join('') : '<div class="empty" style="padding:20px;">None yet</div>';
+  };
+  renderList(expCats, 'settings-cat-list');
+  renderList(incCats, 'settings-income-cat-list');
+}
+
+// ─── TRANSACTION MODAL ───────────────────────────────────────────────────────
+function openAddTx() {
+  state.editingTxId = null;
+  state.currentTxType = 'expense';
+  document.getElementById('tx-modal-title').textContent = 'Add transaction';
+  document.getElementById('tx-save-btn').textContent = 'Save';
+  document.getElementById('tx-desc').value = '';
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-date').value = todayISO();
+  document.getElementById('tx-note').value = '';
+  populateCatSelect('expense');
+  document.querySelectorAll('#tx-type-tabs .pill-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === 'expense'));
+  document.getElementById('tx-modal').classList.remove('hidden');
+  document.getElementById('tx-desc').focus();
+}
+
+function setTxType(type, el) {
+  state.currentTxType = type;
+  document.querySelectorAll('#tx-type-tabs .pill-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  populateCatSelect(type);
+}
+
+function populateCatSelect(type) {
+  const sel = document.getElementById('tx-category');
+  const cats = state.categories.filter(c => c.type === type);
+  sel.innerHTML = cats.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
+}
+
+function closeTxModal() { document.getElementById('tx-modal').classList.add('hidden'); }
+
+function saveTx() {
+  const desc = document.getElementById('tx-desc').value.trim();
+  const amount = parseFloat(document.getElementById('tx-amount').value);
+  const date = document.getElementById('tx-date').value;
+  const category = document.getElementById('tx-category').value;
+  const note = document.getElementById('tx-note').value.trim();
+  if (!desc || !amount || !date) return;
+  if (state.editingTxId) {
+    const i = state.transactions.findIndex(t => t.id === state.editingTxId);
+    if (i !== -1) state.transactions[i] = {...state.transactions[i], desc, amount, date, category, note, type: state.currentTxType};
+  } else {
+    state.transactions.push({ id: Date.now().toString(), desc, amount, date, category, note, type: state.currentTxType });
+  }
+  save(); closeTxModal(); renderAll();
+}
+
+function deleteTx(id) {
+  if (!confirm('Delete this transaction?')) return;
+  state.transactions = state.transactions.filter(t => t.id !== id);
+  save(); renderAll();
+}
+
+// ─── CATEGORY MODAL ──────────────────────────────────────────────────────────
+const COLORS = ['#c8f566','#ff6b6b','#74b9ff','#ffd166','#a29bfe','#55efc4','#fd79a8','#fdcb6e','#00cec9','#e17055'];
+
+function openAddCat() {
+  state.editingCatId = null;
+  document.getElementById('cat-modal-title').textContent = 'New category';
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-budget').value = '';
+  document.getElementById('cat-emoji').value = '';
+  document.getElementById('cat-type').value = 'expense';
+  document.getElementById('cat-delete-btn').style.display = 'none';
+  renderColorGrid('#c8f566');
+  document.getElementById('cat-modal').classList.remove('hidden');
+}
+
+function openEditCat(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  state.editingCatId = id;
+  document.getElementById('cat-modal-title').textContent = 'Edit category';
+  document.getElementById('cat-name').value = cat.name;
+  document.getElementById('cat-budget').value = cat.budget;
+  document.getElementById('cat-emoji').value = cat.emoji;
+  document.getElementById('cat-type').value = cat.type;
+  document.getElementById('cat-delete-btn').style.display = 'inline-flex';
+  renderColorGrid(cat.color);
+  document.getElementById('cat-modal').classList.remove('hidden');
+}
+
+function renderColorGrid(selected) {
+  const grid = document.getElementById('cat-color-grid');
+  grid.innerHTML = COLORS.map(c => `<div class="color-swatch ${c === selected ? 'selected' : ''}" style="background:${c};" onclick="selectColor('${c}', this)"></div>`).join('');
+  document.getElementById('cat-color').value = selected;
+}
+
+function selectColor(color, el) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('cat-color').value = color;
+}
+
+function closeCatModal() { document.getElementById('cat-modal').classList.add('hidden'); }
+
+function saveCat() {
+  const name = document.getElementById('cat-name').value.trim();
+  const budget = parseFloat(document.getElementById('cat-budget').value) || 0;
+  const emoji = document.getElementById('cat-emoji').value.trim() || '📦';
+  const color = document.getElementById('cat-color').value;
+  const type = document.getElementById('cat-type').value;
+  if (!name) return;
+  if (state.editingCatId) {
+    const i = state.categories.findIndex(c => c.id === state.editingCatId);
+    if (i !== -1) state.categories[i] = {...state.categories[i], name, budget, emoji, color, type};
+  } else {
+    state.categories.push({ id: Date.now().toString(), name, budget, emoji, color, type });
+  }
+  save(); closeCatModal(); renderAll();
+}
+
+function deleteCat() {
+  if (!state.editingCatId) return;
+  if (!confirm('Delete this category? Transactions will be uncategorized.')) return;
+  state.categories = state.categories.filter(c => c.id !== state.editingCatId);
+  save(); closeCatModal(); renderAll();
+}
+
+// ─── TX FILTER ────────────────────────────────────────────────────────────────
+function setTxFilter(filter, el) {
+  state.txFilter = filter;
+  document.querySelectorAll('#tx-filter-tabs .pill-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+// ─── EXPORT / IMPORT ─────────────────────────────────────────────────────────
+function exportXLSX() {
+  const wb = XLSX.utils.book_new();
+  const txData = [['Date','Description','Amount','Type','Category','Note']].concat(
+    state.transactions.map(t => {
+      const cat = state.categories.find(c => c.id === t.category);
+      return [t.date, t.desc, t.amount, t.type, cat ? cat.name : '', t.note || ''];
+    })
+  );
+  const catData = [['Name','Emoji','Weekly Budget','Type','Color']].concat(
+    state.categories.map(c => [c.name, c.emoji, c.budget, c.type, c.color])
+  );
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(txData), 'Transactions');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(catData), 'Categories');
+  XLSX.writeFile(wb, `budget-${todayISO()}.xlsx`);
+}
+
+function importXLSX() { document.getElementById('xlsx-input').click(); }
+
+function handleXLSXImport(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'binary'});
+      const txSheet = wb.Sheets['Transactions'];
+      const catSheet = wb.Sheets['Categories'];
+      if (txSheet) {
+        const rows = XLSX.utils.sheet_to_json(txSheet);
+        const cats = catSheet ? XLSX.utils.sheet_to_json(catSheet) : [];
+        if (cats.length) {
+          state.categories = cats.map(r => ({ id: r.Name.toLowerCase().replace(/\s+/g,'-'), name: r.Name, emoji: r.Emoji || '📦', budget: parseFloat(r['Weekly Budget']) || 0, type: r.Type || 'expense', color: r.Color || '#c8f566' }));
+        }
+        state.transactions = rows.map(r => {
+          const cat = state.categories.find(c => c.name === r.Category);
+          return { id: Date.now().toString() + Math.random(), desc: r.Description || '', amount: parseFloat(r.Amount) || 0, date: r.Date, type: r.Type || 'expense', category: cat ? cat.id : '', note: r.Note || '' };
+        });
+        save(); renderAll(); alert('Import successful!');
+      }
+    } catch(err) { alert('Import failed: ' + err.message); }
+  };
+  reader.readAsBinaryString(file);
+  e.target.value = '';
+}
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify({transactions: state.transactions, categories: state.categories}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `budget-backup-${todayISO()}.json`; a.click();
+}
+
+function importJSON() { document.getElementById('json-input').click(); }
+
+function handleJSONImport(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      state.transactions = data.transactions || [];
+      state.categories = data.categories || DEFAULT_CATS;
+      save(); renderAll(); alert('Restore successful!');
+    } catch(err) { alert('Restore failed: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('Delete ALL data? This cannot be undone.')) return;
+  state.transactions = []; state.categories = DEFAULT_CATS;
+  save(); renderAll(); alert('All data cleared.');
+}
+
+// ─── ONEDRIVE ─────────────────────────────────────────────────────────────────
+const OD_SCOPE = 'Files.ReadWrite offline_access';
+const OD_FILE = 'budget-tracker.json';
+
+function oneDriveConnect() {
+  const clientId = document.getElementById('od-client-id').value.trim();
+  if (!clientId) { alert('Please enter your Azure Client ID first.'); return; }
+  localStorage.setItem('od_client_id', clientId);
+  const redirectUri = encodeURIComponent(location.origin + location.pathname);
+  const scope = encodeURIComponent(OD_SCOPE);
+  const state_param = btoa(JSON.stringify({clientId}));
+  localStorage.setItem('od_pending_clientId', clientId);
+  location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${redirectUri}&scope=${scope}&state=${state_param}`;
+}
+
+function handleODCallback() {
+  const hash = location.hash.slice(1);
+  if (!hash.includes('access_token')) return;
+  const params = Object.fromEntries(hash.split('&').map(p => p.split('=')));
+  const token = decodeURIComponent(params.access_token || '');
+  if (!token) return;
+  state.odConnected = true;
+  state.odToken = token;
+  save();
+  history.replaceState(null, '', location.pathname);
+  renderAll();
+  alert('OneDrive connected! You can now push/pull your data.');
+}
+
+async function oneDrivePush(silent = false) {
+  if (!state.odToken) return;
+  const data = JSON.stringify({transactions: state.transactions, categories: state.categories});
+  try {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${OD_FILE}:/content`, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + state.odToken, 'Content-Type': 'application/json' },
+      body: data
+    });
+    if (!r.ok) throw new Error(await r.text());
+    if (!silent) alert('Pushed to OneDrive!');
+  } catch(e) {
+    if (!silent) alert('OneDrive push failed: ' + e.message + '\nYour token may have expired. Reconnect.');
+  }
+}
+
+async function oneDrivePull() {
+  if (!state.odToken) return;
+  try {
+    const meta = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${OD_FILE}`, { headers: { 'Authorization': 'Bearer ' + state.odToken } });
+    if (!meta.ok) throw new Error('File not found. Push first to create it.');
+    const item = await meta.json();
+    const content = await fetch(item['@microsoft.graph.downloadUrl']);
+    const data = await content.json();
+    state.transactions = data.transactions || [];
+    state.categories = data.categories || DEFAULT_CATS;
+    save(); renderAll(); alert('Pulled from OneDrive!');
+  } catch(e) { alert('OneDrive pull failed: ' + e.message); }
+}
+
+function oneDriveDisconnect() {
+  state.odConnected = false; state.odToken = null; state.odAutoSync = false;
+  save(); renderAll();
+  document.getElementById('od-status').textContent = 'Disconnected.';
+  document.getElementById('od-status').style.color = 'var(--muted)';
+  document.getElementById('od-actions').style.display = 'none';
+}
+
+function toggleAutoSync(val) { state.odAutoSync = val; save(); }
+
+// ─── KEYBOARD SHORTCUTS ──────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeTxModal(); closeCatModal(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openAddTx(); }
+});
+
+document.getElementById('tx-modal').addEventListener('click', e => { if (e.target === document.getElementById('tx-modal')) closeTxModal(); });
+document.getElementById('cat-modal').addEventListener('click', e => { if (e.target === document.getElementById('cat-modal')) closeCatModal(); });
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+load();
+handleODCallback();
+renderAll();
+</script>
+</body>
+</html>
